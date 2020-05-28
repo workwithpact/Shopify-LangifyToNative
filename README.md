@@ -26,6 +26,7 @@ Alternatively, you can simply pass your store, key, password, langify id and loc
 - `--collections` ports over collections' translations
 - `--pages` ports over pages' translations
 - `--articles` ports over articles' translations
+- `--sections` ports over theme settings' translations
 - `--all` will port over everything.
 
 

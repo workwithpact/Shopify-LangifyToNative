@@ -36,8 +36,8 @@ class Translator {
       await callback(array[index], index, array);
     }
   }
-  async _getMetafields(resource = null, id = null) {
-    let params = { limit: 250, namespace: this.config.langifyId }
+  async _getMetafields(resource = null, id = null, namespace = null) {
+    let params = { limit: 250, namespace: namespace || this.config.langifyId }
     if (resource && id) {
       params.metafield = {
         owner_resource: resource,
@@ -258,7 +258,7 @@ class Translator {
     data.headers = response.headers
     return data
   }
-  async getTranslationKeys(type) {
+  async getTranslationKeys(type, full = false) {
     let items = []
     let hasNextPage = true
     while (hasNextPage) {
@@ -276,6 +276,7 @@ class Translator {
                   key
                   digest
                   locale
+                  ${full ? 'value' : ''}
                 }
               }
             }
@@ -297,7 +298,7 @@ class Translator {
     const returnValues = {}
     items.forEach(v => {
       returnValues[v.node.resourceId] = {}
-      v.node.translatableContent.forEach(t => returnValues[v.node.resourceId][t.key] = t.digest)
+      v.node.translatableContent.forEach(t => returnValues[v.node.resourceId][t.key] = full ? t : t.digest)
     })
     return returnValues
   }
@@ -370,6 +371,54 @@ class Translator {
       params = collections.nextPageParameters;
     } while (params !== undefined);
     this.log('Custom Collection migration finished!')
+  }
+  async migrateSections() {
+    this.log('Sections migration started...')
+    const translationKeys = await this.getTranslationKeys('ONLINE_STORE_THEME', true)
+    const translations = await this._getMetafields(null, null, `${this.config.langifyId}se_e`)
+    await this.asyncForEach(Object.keys(translationKeys), async (theme) => {
+      console.log('Theme ', theme)
+      const sections = Object.values(translationKeys[theme]).filter(v => v.key.indexOf('section.') === 0)
+      const transactions = []
+      await this.asyncForEach(translations, (translation) => {
+        const parts = translation.value.split('#section#')
+        const initialValue = parts.shift()
+        const translatedValue = parts.shift()
+        const sectionKey = sections.find(v => v.value === initialValue)
+        if (!sectionKey) {
+          this.warn('Could not find section with value ', initialValue)
+          return
+        }
+        this.log('Updating', sectionKey)
+        transactions.push({
+          key: sectionKey.key,
+          locale: this.config.locale,
+          value: translatedValue,
+          translatableContentDigest: sectionKey.digest
+        })
+      })
+      console.log('transactions!', transactions.length)
+      const query = `
+        mutation CreateTranslation($id: ID!, $translations: [TranslationInput!]!) {
+          translationsRegister(resourceId: $id, translations: $translations) {
+            userErrors {
+              message
+              field
+            }
+            translations {
+              locale
+              key
+              value
+            }
+          }
+        }`
+      const variables = {
+        id: theme,
+        translations: transactions
+      }
+      await this.graphql(query, variables)
+    })
+    this.log('Sections migration finished!')
   }
 }
 
