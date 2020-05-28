@@ -384,12 +384,16 @@ class Translator {
         const parts = translation.value.split('#section#')
         const initialValue = parts.shift()
         const translatedValue = parts.shift()
-        const sectionKey = sections.find(v => v.value === initialValue)
+        const sectionKey = sections.find(v => v.value === initialValue && !transactions.find(vv => vv.key === v.key))
         if (!sectionKey) {
           this.warn('Could not find section with value ', initialValue)
           return
         }
         this.log('Updating', sectionKey)
+        if (transactions.find(v => v.key === sectionKey.key)) {
+          console.log('Duplicate key found', sectionKey.key)
+          return
+        }
         transactions.push({
           key: sectionKey.key,
           locale: this.config.locale,
@@ -416,7 +420,7 @@ class Translator {
         id: theme,
         translations: transactions
       }
-      await this.graphql(query, variables)
+      console.log(await this.graphql(query, variables))
     })
     this.log('Sections migration finished!')
   }

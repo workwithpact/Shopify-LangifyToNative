@@ -37,9 +37,6 @@ const start = async () => {
   if (program.all || program.pages) {
     await translator.migratePages()
   }
-  if (program.all || program.blogs) {
-    await translator.migrateBlogs()
-  }
   if (program.all || program.articles) {
     await translator.migrateArticles()
   }
