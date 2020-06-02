@@ -62,20 +62,6 @@ class Translator {
       title: metafields.filter(v => v.key === 'title').map(v => v.value).find(v => v),
       body_html: metafields.filter(v => v.key === 'content').map(v => v.value).find(v => v),
     }
-    const query = `
-    mutation CreateTranslation($id: ID!, $translations: [TranslationInput!]!) {
-      translationsRegister(resourceId: $id, translations: $translations) {
-        userErrors {
-          message
-          field
-        }
-        translations {
-          locale
-          key
-          value
-        }
-      }
-    }`
     const variables = {
       id: page.admin_graphql_api_id,
       translations: []
@@ -91,7 +77,8 @@ class Translator {
     if (!variables.translations.length) {
       return
     }
-    const response = await this.shopify.graphql(query, variables)
+    
+    const response = await this.processTranslations(variables)
   }
   async _migrateArticle(article, translationKeys) {
     this.info(`[ARTICLE ${article.id}] ${article.handle} started... ${article.admin_graphql_api_id}`)
@@ -101,20 +88,6 @@ class Translator {
       body_html: metafields.filter(v => v.key === 'content').map(v => v.value).find(v => v),
       summary_html: metafields.filter(v => v.key === 'excerpt_or_content').map(v => v.value).find(v => v),
     }
-    const query = `
-    mutation CreateTranslation($id: ID!, $translations: [TranslationInput!]!) {
-      translationsRegister(resourceId: $id, translations: $translations) {
-        userErrors {
-          message
-          field
-        }
-        translations {
-          locale
-          key
-          value
-        }
-      }
-    }`
     const variables = {
       id: article.admin_graphql_api_id,
       translations: []
@@ -130,7 +103,7 @@ class Translator {
     if (!variables.translations.length) {
       return
     }
-    const response = await this.shopify.graphql(query, variables)
+    const response = await this.processTranslations(variables)
   }
   async _migrateProduct(product, translationKeys) {
     this.info(`[PRODUCT ${product.id}] ${product.handle} started... ${product.admin_graphql_api_id}`)
@@ -139,20 +112,6 @@ class Translator {
       title: metafields.filter(v => v.key === 'title').map(v => v.value).find(v => v),
       body_html: metafields.filter(v => v.key === 'description').map(v => v.value).find(v => v),
     }
-    const query = `
-    mutation CreateTranslation($id: ID!, $translations: [TranslationInput!]!) {
-      translationsRegister(resourceId: $id, translations: $translations) {
-        userErrors {
-          message
-          field
-        }
-        translations {
-          locale
-          key
-          value
-        }
-      }
-    }`
     const variables = {
       id: product.admin_graphql_api_id,
       translations: []
@@ -168,7 +127,7 @@ class Translator {
     if (!variables.translations.length) {
       return
     }
-    const response = await this.shopify.graphql(query, variables)
+    const response = await this.processTranslations(variables)
   }
   async _migrateSmartCollection(collection, translationKeys) {
     this.info(`[SMART COLLECTION ${collection.id}] ${collection.handle} started... ${collection.admin_graphql_api_id}`)
@@ -177,20 +136,6 @@ class Translator {
       title: metafields.filter(v => v.key === 'title').map(v => v.value).find(v => v),
       body_html: metafields.filter(v => v.key === 'description').map(v => v.value).find(v => v),
     }
-    const query = `
-    mutation CreateTranslation($id: ID!, $translations: [TranslationInput!]!) {
-      translationsRegister(resourceId: $id, translations: $translations) {
-        userErrors {
-          message
-          field
-        }
-        translations {
-          locale
-          key
-          value
-        }
-      }
-    }`
     const variables = {
       id: collection.admin_graphql_api_id,
       translations: []
@@ -206,7 +151,7 @@ class Translator {
     if (!variables.translations.length) {
       return
     }
-    const response = await this.shopify.graphql(query, variables)
+    const response = await this.processTranslations(variables)
   }
   async _migrateCustomCollection(collection, translationKeys) {
     this.info(`[CUSTOM COLLECTION ${collection.id}] ${collection.handle} started... ${collection.admin_graphql_api_id}`)
@@ -215,20 +160,6 @@ class Translator {
       title: metafields.filter(v => v.key === 'title').map(v => v.value).find(v => v),
       body_html: metafields.filter(v => v.key === 'description').map(v => v.value).find(v => v),
     }
-    const query = `
-    mutation CreateTranslation($id: ID!, $translations: [TranslationInput!]!) {
-      translationsRegister(resourceId: $id, translations: $translations) {
-        userErrors {
-          message
-          field
-        }
-        translations {
-          locale
-          key
-          value
-        }
-      }
-    }`
     const variables = {
       id: collection.admin_graphql_api_id,
       translations: []
@@ -244,7 +175,7 @@ class Translator {
     if (!variables.translations.length) {
       return
     }
-    const response = await this.shopify.graphql(query, variables)
+    const response = await this.processTranslations(variables)
   }
   async graphql(query, variables = {}) {
     const token = this.config.password
@@ -257,6 +188,52 @@ class Translator {
     const data = await response.json()
     data.headers = response.headers
     return data
+  }
+  async getCustomTranslations() {
+    if (!this._customTranslations) {
+      const translatedKeys = await this._getMetafields(null, null, `${this.config.langifyId}cu`)
+      const originalKeys = await this._getMetafields(null, null, `custom`)
+      this._customTranslations = {}
+      originalKeys.forEach(v => {
+        const original = v.value
+        const translated = translatedKeys.filter(vv => vv.key == v.key.split('ly').join('id')).map(vv => vv.value).find(vv => true)
+        this._customTranslations[original] = translated
+      })
+    }
+    return this._customTranslations
+  }
+  async processTranslations(variables) {
+    const customTranslations = await this.getCustomTranslations()
+    if (variables && variables.translations && variables.translations.length) {
+      variables.translations = variables.translations.map(v => {
+        let newValue = `${v.value}`
+        Object.keys(customTranslations).forEach(key => {
+          if (newValue.indexOf(key) >= 0){ 
+            console.log('Found a custom match: ', key)
+          }
+          newValue = newValue.split(key).join(customTranslations[key])
+        })
+        return {
+          ...v,
+          value: newValue,
+        }
+      })
+    } 
+    const query = `
+      mutation CreateTranslation($id: ID!, $translations: [TranslationInput!]!) {
+        translationsRegister(resourceId: $id, translations: $translations) {
+          userErrors {
+            message
+            field
+          }
+          translations {
+            locale
+            key
+            value
+          }
+        }
+      }`
+    return await this.shopify.graphql(query, variables)
   }
   async getTranslationKeys(type, full = false) {
     let items = []
@@ -401,7 +378,6 @@ class Translator {
           translatableContentDigest: sectionKey.digest
         })
       })
-      console.log('transactions!', transactions.length)
       const query = `
         mutation CreateTranslation($id: ID!, $translations: [TranslationInput!]!) {
           translationsRegister(resourceId: $id, translations: $translations) {
@@ -420,7 +396,7 @@ class Translator {
         id: theme,
         translations: transactions
       }
-      console.log(await this.graphql(query, variables))
+      await this.processTranslations(variables)
     })
     this.log('Sections migration finished!')
   }
