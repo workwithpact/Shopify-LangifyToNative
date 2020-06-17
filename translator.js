@@ -189,13 +189,25 @@ class Translator {
     data.headers = response.headers
     return data
   }
+  async getListTranslations() {
+    if (!this._listTranslations) {
+      const translatedKeys = await this._getMetafields(null, null, this.config.langifyId)
+      this._listTranslations = {}
+      translatedKeys.filter(v => v.key.indexOf('li') === 0).forEach(v => {
+        const original = v.key.substr(2)
+        const translated = v.value
+        this._listTranslations[original.toUpperCase()] = translated
+      })
+    }
+    return this._listTranslations
+  }
   async getCustomTranslations() {
     if (!this._customTranslations) {
       const translatedKeys = await this._getMetafields(null, null, `${this.config.langifyId}cu`)
       const originalKeys = await this._getMetafields(null, null, `custom`)
       this._customTranslations = {}
       originalKeys.forEach(v => {
-        const original = v.value
+        const original = v.value.toUpperCase()
         const translated = translatedKeys.filter(vv => vv.key == v.key.split('ly').join('id')).map(vv => vv.value).find(vv => true)
         this._customTranslations[original] = translated
       })
@@ -208,10 +220,10 @@ class Translator {
       variables.translations = variables.translations.map(v => {
         let newValue = `${v.value}`
         Object.keys(customTranslations).forEach(key => {
-          if (newValue.indexOf(key) >= 0){ 
+          if (newValue.indexOf(key.toUpperCase()) >= 0){ 
             console.log('Found a custom match: ', key)
           }
-          newValue = newValue.split(key).join(customTranslations[key])
+          newValue = newValue.split(key).join(customTranslations[key.toUpperCase()])
         })
         return {
           ...v,
@@ -399,6 +411,43 @@ class Translator {
       await this.processTranslations(variables)
     })
     this.log('Sections migration finished!')
+  }
+  async migrateLinks() {
+    this.log('Links migration started...')
+    const translationKeys = await this.getTranslationKeys('LINK', true)
+    const translations = await this.getCustomTranslations()
+    const listTranslations = await this.getListTranslations()
+
+    await this.asyncForEach(Object.entries(translationKeys), async ([key, link]) => {
+      const transactions = []
+      Object.values(link || {}).forEach((linkProperties) => {
+        const spaceless = linkProperties.value.split(' ').join('').toUpperCase()
+        if (listTranslations[spaceless]) {
+          transactions.push({
+            key: linkProperties.key,
+            locale: this.config.locale,
+            value: listTranslations[spaceless.toUpperCase()],
+            translatableContentDigest: linkProperties.digest
+          })
+        }
+        else if (translations[linkProperties.value.toUpperCase()]) {
+          transactions.push({
+            key: linkProperties.key,
+            locale: this.config.locale,
+            value: translations[linkProperties.value.toUpperCase()],
+            translatableContentDigest: linkProperties.digest
+          })
+        } else {
+          this.log(`Could not find appropriate translation for link <${linkProperties.value}>`)
+        }
+      })
+      const variables = {
+        id: key,
+        translations: transactions
+      }
+      await this.processTranslations(variables)
+    })
+    this.log('Links migration finished!')
   }
 }
 

@@ -12,6 +12,7 @@ program
   .option('--collections', 'Run the translator for collections')
   .option('--sections', 'Run the translator for sections')
   .option('--pages', 'Run the translator for pages')
+  .option('--links', 'Run the translator for links (navigation)')
   .option('-v, --verbosity', 'Verbosity level. Defaults to 4, as talkative as my MIL.')
   .option('--shop', 'Shopify instance. ex: your-store')
   .option('--key', 'Shopify API key')
@@ -36,6 +37,9 @@ const start = async () => {
 
   if (program.all || program.pages) {
     await translator.migratePages()
+  }
+  if (program.all || program.links) {
+    await translator.migrateLinks()
   }
   if (program.all || program.articles) {
     await translator.migrateArticles()
