@@ -11,7 +11,7 @@
   "dependencies": {
     "commander": "^5.1.0",
     "dotenv": "^8.2.0",
-    "node-fetch": "^2.6.0",
+    "node-fetch": "^2.6.7",
     "shopify-api-node": "^3.3.2"
   }
 }
